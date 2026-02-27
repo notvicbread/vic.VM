@@ -1,0 +1,50 @@
+cmake_minimum_required(VERSION 3.10)
+project(vicVM)
+
+set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
+
+# Options
+option(ENABLE_AI       "Enable AI tensor instructions" ON)
+option(ENABLE_HTTP     "Enable HTTP server mode" OFF)
+option(ENABLE_MICROCODE "Enable microcode engine" ON)
+
+# Assembly support
+enable_language(ASM)
+
+# Detect OS
+if(WIN32)
+    add_definitions(-DWIN32_LEAN_AND_MEAN)
+    set(PLATFORM_LIBS ws2_32)
+elseif(APPLE)
+    set(PLATFORM_LIBS pthread)
+else()
+    set(PLATFORM_LIBS pthread rt)
+endif()
+
+# Source files
+set(SOURCES main.cpp vm.cpp asm.asm)
+if(ENABLE_HTTP)
+    list(APPEND SOURCES http_server.cpp)
+endif()
+
+add_executable(vicvm ${SOURCES})
+
+target_compile_options(vicvm PRIVATE
+    -Os -flto -fno-exceptions -fno-rtti
+    -ffunction-sections -fdata-sections
+    -march=native -mavx512f -mavx512dq -mavx512bw -mavx512vl
+    $<$<BOOL:${ENABLE_AI}>:-DENABLE_AI>
+    $<$<BOOL:${ENABLE_HTTP}>:-DENABLE_HTTP>
+    $<$<BOOL:${ENABLE_MICROCODE}>:-DENABLE_MICROCODE>
+)
+
+if(WIN32)
+    target_compile_options(vicvm PRIVATE /Os /GL)
+    target_link_options(vicvm PRIVATE /LTCG /SUBSYSTEM:CONSOLE)
+else()
+    target_compile_options(vicvm PRIVATE -fno-stack-protector -fomit-frame-pointer)
+    target_link_options(vicvm PRIVATE -s -Wl,--gc-sections -static -no-pie)
+endif()
+
+target_link_libraries(vicvm ${PLATFORM_LIBS})
